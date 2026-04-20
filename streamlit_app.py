@@ -1,94 +1,95 @@
 import streamlit as st
-from openai import OpenAI
+import google.generativeai as genai
+from PIL import Image
 import os
 
-# Hàm đọc nội dung từ file văn bản
+# 1. Cấu hình trang Web
+st.set_page_config(page_title="Trợ Lý 3D Commercial", page_icon="🎬", layout="centered")
+
+# Hàm đọc file text
 def rfile(name_file):
-    with open(name_file, "r", encoding="utf-8") as file:
-        return file.read()
+    try:
+        with open(name_file, "r", encoding="utf-8") as file:
+            return file.read()
+    except FileNotFoundError:
+        return ""
 
-# Hiển thị logo (nếu có)
+# 2. Cấu hình Gemini API (Lấy từ phần cài đặt biến môi trường)
 try:
-    col1, col2, col3 = st.columns([3, 2, 3])
-    with col2:
-        st.image("logo.png", use_container_width=True)
-except:
-    pass
+    api_key = st.secrets["GEMINI_API_KEY"]
+    genai.configure(api_key=api_key)
+    # Dùng model flash để xử lý cả văn bản và hình ảnh siêu tốc
+    model = genai.GenerativeModel('gemini-1.5-flash') 
+except Exception as e:
+    st.error("⚠️ Chưa cấu hình GEMINI_API_KEY. Vui lòng thêm vào Secret của nền tảng.")
 
-# Hiển thị tiêu đề
+# 3. Đọc dữ liệu hệ thống
+system_prompt = rfile("01.system_trainning.txt")
 title_content = rfile("00.xinchao.txt")
-st.markdown(
-    f"""<h1 style="text-align: center; font-size: 24px;">{title_content}</h1>""",
-    unsafe_allow_html=True
-)
 
-# Lấy OpenAI API key từ st.secrets
-openai_api_key = st.secrets.get("OPENAI_API_KEY")
+# 4. GIAO DIỆN NGƯỜI DÙNG (Giống y hệt ảnh anh gửi)
+st.title("🎬 Tool Tạo Video Nhân Hóa 3D")
+if title_content:
+    st.info(title_content)
 
-# Khởi tạo OpenAI client
-client = OpenAI(api_key=openai_api_key)
+st.markdown("### ⚙️ Cài đặt kịch bản")
 
-# Khởi tạo tin nhắn "system" và "assistant"
-INITIAL_SYSTEM_MESSAGE = {"role": "system", "content": rfile("01.system_trainning.txt")}
-INITIAL_ASSISTANT_MESSAGE = {"role": "assistant", "content": rfile("02.assistant.txt")}
+# Các ô nhập liệu
+topic = st.text_input("Chủ đề (Nội dung chính)", placeholder="Ví dụ: Công dụng của Serum Meso...")
 
-# Kiểm tra nếu chưa có session lưu trữ thì khởi tạo tin nhắn ban đầu
-if "messages" not in st.session_state:
-    st.session_state.messages = [INITIAL_SYSTEM_MESSAGE, INITIAL_ASSISTANT_MESSAGE]
+col1, col2 = st.columns(2)
+with col1:
+    voice = st.selectbox("Giọng đọc (Voice)", [
+        "Nữ trẻ (Năng động/Reviewer)", 
+        "Nam trầm (Chuyên gia/Bác sĩ)", 
+        "ASMR (Nhẹ nhàng/Thư giãn)",
+        "Giọng châm biếm/Hài hước"
+    ])
+with col2:
+    context = st.selectbox("Bối cảnh (Môi trường 3D)", [
+        "Bàn trang điểm hiện đại", 
+        "Studio tối giản (Đen/Trắng)", 
+        "Phòng thí nghiệm High-tech",
+        "Thiên nhiên/Organic"
+    ])
 
-# CSS để căn chỉnh trợ lý bên trái, người hỏi bên phải, và thêm icon trợ lý
-st.markdown(
-    """
-    <style>
-        .assistant {
-            padding: 10px;
-            border-radius: 10px;
-            max-width: 75%;
-            background: none; /* Màu trong suốt */
-            text-align: left;
-        }
-        .user {
-            padding: 10px;
-            border-radius: 10px;
-            max-width: 75%;
-            background: none; /* Màu trong suốt */
-            text-align: right;
-            margin-left: auto;
-        }
-        .assistant::before { content: "🤖 "; font-weight: bold; }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
+humor_level = st.slider("Mức độ hài hước/Bắt trend", min_value=1, max_value=5, value=3)
 
-# Hiển thị lịch sử tin nhắn (loại bỏ system để tránh hiển thị)
-for message in st.session_state.messages:
-    if message["role"] == "assistant":
-        st.markdown(f'<div class="assistant">{message["content"]}</div>', unsafe_allow_html=True)
-    elif message["role"] == "user":
-        st.markdown(f'<div class="user">{message["content"]}</div>', unsafe_allow_html=True)
+# Ô tải ảnh lên
+st.markdown("### 📸 Tải ảnh sản phẩm lên")
+uploaded_file = st.file_uploader("Kéo thả file vào đây hoặc Click để duyệt", type=["png", "jpg", "jpeg"])
 
-# Ô nhập liệu cho người dùng
-if prompt := st.chat_input("Sếp nhập nội dung cần trao đổi ở đây nhé?"):
-    # Lưu tin nhắn người dùng vào session
-    st.session_state.messages.append({"role": "user", "content": prompt})
-    st.markdown(f'<div class="user">{prompt}</div>', unsafe_allow_html=True)
+if uploaded_file is not None:
+    # Hiển thị ảnh thu nhỏ sau khi tải lên
+    image = Image.open(uploaded_file)
+    st.image(image, caption="Ảnh sản phẩm đã tải lên", width=200)
 
-    # Tạo phản hồi từ API OpenAI
-    response = ""
-    stream = client.chat.completions.create(
-        model=rfile("module_chatgpt.txt").strip(),
-        messages=[{"role": m["role"], "content": m["content"]} for m in st.session_state.messages],
-        stream=True,
-    )
-
-    # Ghi lại phản hồi của trợ lý vào biến
-    for chunk in stream:
-        if chunk.choices:
-            response += chunk.choices[0].delta.content or ""
-
-    # Hiển thị phản hồi của trợ lý
-    st.markdown(f'<div class="assistant">{response}</div>', unsafe_allow_html=True)
-
-    # Cập nhật lịch sử tin nhắn trong session
-    st.session_state.messages.append({"role": "assistant", "content": response})
+# Nút bấm tạo Prompt
+if st.button("🚀 Tạo Prompt Ngay", type="primary", use_container_width=True):
+    if not topic:
+        st.warning("Vui lòng nhập Chủ đề trước khi tạo Prompt anh nhé!")
+    else:
+        with st.spinner("⏳ Hệ thống đang phân tích ảnh và viết Prompt 3D..."):
+            # Lắp ráp thông tin người dùng chọn thành 1 câu lệnh gửi cho AI
+            user_request = f"""
+            Hãy tạo kịch bản dựa trên các thông số sau:
+            - Chủ đề: {topic}
+            - Giọng đọc: {voice}
+            - Bối cảnh: {context}
+            - Mức độ hài hước (1-5): {humor_level}
+            """
+            
+            try:
+                # Nếu có ảnh thì gửi cả ảnh và chữ
+                if uploaded_file is not None:
+                    response = model.generate_content([system_prompt, user_request, image])
+                # Nếu không có ảnh thì chỉ gửi chữ
+                else:
+                    response = model.generate_content([system_prompt, user_request])
+                
+                st.success("✅ Đã tạo xong!")
+                st.markdown("### 📝 Kết quả của anh đây:")
+                st.write(response.text)
+                
+            except Exception as e:
+                st.error(f"❌ Có lỗi xảy ra trong quá trình tạo: {e}")
