@@ -16,7 +16,7 @@ def rfile(name_file):
 
 # 2. Cấu hình Gemini API (Lấy từ phần cài đặt biến môi trường)
 try:
-    api_key = st.secrets["GEMINI_API_KEY"]
+    api_key = "AIzaSyDQG0oaRth0C-6yzGxsLJGdSneCr2X9LkM"
     genai.configure(api_key=api_key)
     # Dùng model flash để xử lý cả văn bản và hình ảnh siêu tốc
     model = genai.GenerativeModel('gemini-1.5-flash') 
